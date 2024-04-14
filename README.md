@@ -47,8 +47,3 @@ This implementation supports single chat sessions and ensures confidentiality an
 ## Feedback and Contributions
 
 [Provide information on how users can give feedback or contribute to the project.]
-
----
-
-Feel free to customize this README according to your project's specific requirements and implementation details.
-

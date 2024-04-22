@@ -8,27 +8,32 @@ config = GetConfig()
 class Client:
     def __init__(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listeningThread = None
+        self.Start()
 
     def __del__(self):
         self.socket.close()
 
     def Listen(self):
-        while True:
-            response = self.socket.recv(1024).decode("utf-8")
-            print(f"\tServer response: {response}")
+        try:
+            while True:
+                response = self.socket.recv(1024).decode("utf-8")
+                print(response)
+
+        except Exception as e:
+            print(e)
+            exit()
 
     def Send(self, message):
         self.socket.send(message.encode("utf-8"))
 
     def Start(self):
-        self.WelcomeMessage()
-
         try:
+            print("connecting to server...")
             self.socket.connect((config["top-secret"]["ServerIP"], int(config["top-secret"]["ServerPort"])))
+            print("connected to server")
 
-            t1 = threading.Thread(target=self.Listen)
-            t1.start()
+            listening_thread = threading.Thread(target=self.Listen)
+            listening_thread.start()
 
             while True:
                 message = input("Enter message: ")
@@ -42,15 +47,6 @@ class Client:
         finally:
             self.socket.close()
 
-    def WelcomeMessage(self):
-        try:
-            with open("assets/logo.txt", "r") as f:
-                print(f.read())
-
-        except FileNotFoundError:
-            print("Welcome to the chatroom\nNO FILE FOUND")
-
 
 if __name__ == "__main__":
     client = Client()
-    client.Start()

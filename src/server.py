@@ -103,6 +103,10 @@ class Server:
                     print("==== active connections ====")
                     for connection in self.connections:
                         print(f"{connection}")
+                elif "say" in command:
+                    command = command.split(" ")
+                    for connection in self.connections:
+                        connection.socket.send(" ".join(["server:"] + command[1:]).encode("utf-8"))
                 else:
                     print("Invalid command")
 

@@ -16,10 +16,3 @@ class User:
 
     def set_password(self):
         self.password = getpass('Enter your password: ')
-
-    def get_json(self):
-        return {
-            self.username: {
-                'password': self.password,
-            }
-        }

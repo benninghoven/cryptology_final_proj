@@ -7,20 +7,42 @@ import json
 config = GetConfig()
 
 
+def generate_salt():
+    import random
+    import string
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+
+
 def load_users():
-    print("loading users from file")
+    FILENAME = "users.json"
+
+    print(f"checking if {FILENAME} exists...")
     try:
-        with open("users.json", "r") as file:
-            users = json.load(file)
-            return users
+        with open(FILENAME, "r"):
+            print(f"{FILENAME} found")
+            pass
     except FileNotFoundError:
-        return {}
+        print(f"{FILENAME} not found")
+        with open(FILENAME, "w") as file:
+            json.dump({}, file)
+
+    with open(FILENAME, "r") as file:
+        if file.read() == "":
+            print(f"{FILENAME} is empty")
+            return {}
+        file.seek(0)  # json.load(file) is not working without this
+        try:
+            return json.load(file)
+        except json.decoder.JSONDecodeError:
+            print("error loading users from file")
+            return {}
 
 
 def save_users(users):
-    print("saving users to file")
+    print("saving users to file...")
     with open("users.json", "w") as file:
         json.dump(users, file)
+    print("users saved to file")
 
 
 class Client:
@@ -29,6 +51,14 @@ class Client:
         self.user = None
         self.connected = False
         self.Start()
+
+    def Start(self):
+        if self.ConnectToChatServer() is True:
+            while True:
+                self.StartMenu()
+        else:
+            print("could not connect to server")
+            exit()
 
     def __del__(self):
         self.socket.close()
@@ -54,23 +84,18 @@ class Client:
             self.socket.connect((config["top-secret"]["ServerIP"], int(config["top-secret"]["ServerPort"])))
             self.connected = True
             self.user = User()
+            print("Connected to server")
             return True
 
         except ConnectionRefusedError:
             print("is the server running?")
             return False
 
-    def Start(self):
-        if self.ConnectToChatServer() is True:
-            self.StartMenu()
-        else:
-            print("could not connect to server")
-            exit()
-
     def StartMenu(self):
         print("1. Login")
         print("2. Register")
-        print("3. Exit")
+        print("3. List Users")
+        print("9. Exit")
 
         choice = input("Enter your choice: ")
 
@@ -79,6 +104,8 @@ class Client:
         elif choice == "2":
             self.Register()
         elif choice == "3":
+            self.ListUsers()
+        elif choice == "9":
             exit()
         else:
             print("Invalid choice")
@@ -89,7 +116,17 @@ class Client:
         self.user.set_username()
 
         if self.user.username in users:
+
             self.user.set_password()
+
+            salt = users[self.user.username]["salt"]
+            print("salt: ", salt)
+            given_hashed_password = hash(self.user.password + salt)
+            actual_hashed_password = (users[self.user.username]["hashed_password"])
+
+            print(f"correct_hashed_password: {actual_hashed_password}")
+            print(f"given_hashed_password:   {given_hashed_password}")
+
             if self.user.password == users[self.user.username]["password"]:
                 self.Home()
             else:
@@ -97,9 +134,7 @@ class Client:
                 self.Login()
         else:
             print("User not found")
-            self.Login()
-
-        self.Home()
+            self.StartMenu()
 
     def Register(self):
         users = load_users()
@@ -109,9 +144,12 @@ class Client:
             self.Register()
         else:
             self.user.set_password()
-            users = {self.user.username: {
-                "password": f"{self.user.password}",
-                }}
+            salt = generate_salt()
+            users[self.user.username] = {
+                "password": f"{self.user.password}",  # remove this soon
+                "hashed_password": f"{hash(self.user.password + salt)}",
+                "salt": f"{salt}"
+                }
             save_users(users)
             print("User registered successfully")
             self.StartMenu()
@@ -125,13 +163,20 @@ class Client:
         else:
             print("User not found")
 
+    def ListUsers(self):
+        users = load_users()
+        print("=-=-=-=-=-=-=-= Users =-=-=-=-=-=-=-=")
+        for user in users:
+            print(user)
+
     def Home(self):
         print(f"Logged in as: {self.user.username}")
         print(f"Online friends: {self.user.friends}/{len(self.user.friends)}")
         while True:
             print("1. Send message")
             print("2. Add friend")
-            print("3. Logout")
+            print("3. List users")
+            print("9. Logout")
 
             choice = input("Enter your choice: ")
 
@@ -140,6 +185,8 @@ class Client:
             elif choice == "2":
                 self.AddFriend()
             elif choice == "3":
+                self.ListUsers()
+            elif choice == "9":
                 self.StartMenu()
             else:
                 print("Invalid choice")

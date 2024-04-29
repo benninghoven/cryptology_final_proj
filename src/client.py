@@ -13,6 +13,11 @@ def generate_salt():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
 
 
+def generate_hashed_password(password, salt):
+    import hashlib
+    return hashlib.sha256(password.encode() + salt.encode()).hexdigest()
+
+
 def load_users():
     FILENAME = "users.json"
 
@@ -41,19 +46,20 @@ def load_users():
 def save_users(users):
     print("saving users to file...")
     with open("users.json", "w") as file:
-        json.dump(users, file)
+        json.dump(users, file, indent=4)
     print("users saved to file")
 
 
 class Client:
     def __init__(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.user = None
+        self.user = User()
         self.connected = False
         self.Start()
 
     def Start(self):
-        if self.ConnectToChatServer() is True:
+        # if self.ConnectToChatServer() is True:
+        if True:
             while True:
                 self.StartMenu()
         else:
@@ -120,18 +126,18 @@ class Client:
             self.user.set_password()
 
             salt = users[self.user.username]["salt"]
-            print("salt: ", salt)
-            given_hashed_password = hash(self.user.password + salt)
+
+            given_hashed_password = generate_hashed_password(self.user.password, salt)
             actual_hashed_password = (users[self.user.username]["hashed_password"])
 
             print(f"correct_hashed_password: {actual_hashed_password}")
             print(f"given_hashed_password:   {given_hashed_password}")
 
-            if self.user.password == users[self.user.username]["password"]:
+            if actual_hashed_password == given_hashed_password:
                 self.Home()
             else:
                 print("Invalid password")
-                self.Login()
+                self.StartMenu()
         else:
             print("User not found")
             self.StartMenu()
@@ -145,13 +151,17 @@ class Client:
         else:
             self.user.set_password()
             salt = generate_salt()
+            hashed_password = generate_hashed_password(self.user.password, salt)
+
             users[self.user.username] = {
-                "password": f"{self.user.password}",  # remove this soon
-                "hashed_password": f"{hash(self.user.password + salt)}",
+                "hashed_password": f"{hashed_password}",
                 "salt": f"{salt}"
                 }
+
             save_users(users)
+
             print("User registered successfully")
+
             self.StartMenu()
 
     def AddFriend(self):
@@ -159,9 +169,9 @@ class Client:
         username = input("Enter username to add: ")
         if username in users:
             self.user.friends.append(username)
-            print(f"{username} added to friends list")
+            print(f"sent {username} a friend request")
         else:
-            print("User not found")
+            print("user not found")
 
     def ListUsers(self):
         users = load_users()

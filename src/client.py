@@ -1,8 +1,9 @@
 import socket
 import threading
-from config import GetConfig
-from user import User
 import json
+
+from .config import GetConfig
+from .user import User
 
 config = GetConfig()
 

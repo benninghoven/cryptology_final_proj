@@ -15,7 +15,23 @@ class TestClient(unittest.TestCase):
 
     def test_client_connection(self):
         client = Client
-        self.assertTrue(client.connect())
+        self.assertTrue(client.ConnectToServer())
+
+    def test_client_disconnection(self):
+        client = Client
+        self.assertTrue(client.DisconnectFromServer())
+
+    def test_client_login(self):
+        client = Client
+        self.assertTrue(client.Login())
+
+    def test_client_logout(self):
+        client = Client
+        self.assertTrue(client.Logout())
+
+    def test_client_save_data_to_database(self):
+        client = Client
+        self.assertTrue(client.SaveData())
 
 
 if __name__ == '__main__':

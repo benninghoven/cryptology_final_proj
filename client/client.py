@@ -1,6 +1,7 @@
 import socket
 import configparser
 import threading
+import pwinput
 
 
 config = configparser.ConfigParser()
@@ -11,6 +12,7 @@ class Client:
     def __init__(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.header_length = int(config["top-secret"]["HeaderLength"])
+
 
         self.ConnectToServer()
 
@@ -44,11 +46,7 @@ class Client:
         message_length = len(message)
         # make sure message_length is the same length as header_length
         header = f"{message_length:<{self.header_length}}"
-        print(f"header: {header}")
-
-        print("start")
-        print(f"message: {message}")
-        print("end")
+        print(f"sending message: {header + message}")
         try:
             self.socket.send(message.encode("utf-8"))
 
@@ -61,8 +59,13 @@ class Client:
 
         try:
             while True:
-                response = self.socket.recv(self.header_length).decode("utf-8")
-                print(f"response: {response}")
+                header = self.socket.recv(self.header_length).decode("utf-8")
+                if not header:
+                    print("server disconnected")
+                    break
+                message_length = int(header)
+                message = self.socket.recv(message_length).decode("utf-8")
+                print(f"server: {message}")
 
         except Exception as e:
             print(e)

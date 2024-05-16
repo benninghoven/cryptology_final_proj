@@ -43,13 +43,12 @@ class Client:
             self.SendMessage(message)
 
     def SendMessage(self, message):
-        message_length = len(message)
-        # make sure message_length is the same length as header_length
-        header = f"{message_length:<{self.header_length}}"
-        print(f"sending message: {header + message}")
+        header = f"{len(message):<{self.header_length}}"
+        print(f"HEADER: {header}")
+        full_message = header + message
+        print(f"FULL MESSAGE: {full_message}")
         try:
-            self.socket.send(message.encode("utf-8"))
-
+            self.socket.send(full_message.encode("utf-8"))
         except Exception as e:
             print(f"Error: {e}")
             exit()

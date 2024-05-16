@@ -76,13 +76,13 @@ class Server:
         # then start listening to what they say and reply based on state
         cur_client = self.online_clients[clientname]
         while True:
-            header = cur_client.conn.recv(self.header_length).decode("utf-8")
-            print(f"header: {header}")
-
-
-    def Handshake(self, conn):
-        message = "Welcome to the server!"
-        #self.SendMessages(conn, message)
+            header = cur_client.conn.recv(self.header_length)
+            if not len(header):
+                print(f"{clientname} disconnected")
+                del self.online_clients[clientname]
+                break
+            message = cur_client.conn.recv(int(header))
+            print(f"{clientname}: {message}")
 
     def SendMessages(self, conn, message):
         # attach the header to the message

@@ -1,9 +1,11 @@
 import socket
 import threading
 import configparser
+import mysql.connector
 
 config = configparser.ConfigParser()
 config.read("../config.ini")
+
 
 
 def PeerNameToStringName(conn):
@@ -39,6 +41,7 @@ class Server:
         self.Start()
 
     def Start(self):
+        self.ConnectToDatabase()
         print("server is starting")
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((config["top-secret"]["ServerIP"], int(config["top-secret"]["ServerPort"])))
@@ -49,6 +52,17 @@ class Server:
 
         self.ListenForConnections()
 
+    def ConnectToDatabase(self):
+        try:
+            self.cnx = mysql.connector.connect(
+                    user='user',
+                    password='password',
+                    host='127.0.0.1',
+                    database='robco_database')
+        except mysql.connector.Error as e:
+            print(f"Error connecting to database: {e}")
+            exit()
+
     def HandleAdminConsole(self):
         while True:
             command = input("$ ")
@@ -58,6 +72,7 @@ class Server:
                     print(f"{client.name}")
             elif command == "exit":
                 print("shutting down server...")
+                self.cnx.close()
                 exit()
             else:
                 print("invalid command")
@@ -67,6 +82,9 @@ class Server:
         while True:
             conn, addr = self.socket.accept()
             current_client = ActiveClient(conn, addr)
+            if current_client.name in self.online_clients:
+                print(f"{current_client.name} is already connected")
+                continue
             self.online_clients[current_client.name] = current_client
             print(f"{current_client.name} connected")
             current_client.thread = threading.Thread(target=self.HandleIncomingSockets, args=(current_client.name,))
@@ -76,26 +94,74 @@ class Server:
         # start with handshake protocol
         # then start listening to what they say and reply based on state
         cur_client = self.online_clients[clientname]
-        self.SendMessages(cur_client.conn, """
-                          Welcome to the server!
-                          1. Login
-                          2. Create Account
-                          3. Exit
-                          """)
         while True:
             header = cur_client.conn.recv(self.header_length)
             if not len(header):
                 print(f"{clientname} disconnected")
                 del self.online_clients[clientname]
                 break
-            message = cur_client.conn.recv(int(header)).decode("utf-8")
+            message = cur_client.conn.recv(int(header))
+            try:
+                message = message.decode("utf-8")
+            except Exception as e:
+                print(f"Error decoding message: {e}")
 
-            print(f"{clientname}: {message}")
+            self.HandleMessage(clientname, message)
 
+    # STATES = {
+    #    "login_menu": 0,
+    #    "entering_username": 1,
+    #    "entering_password": 2,
+    #    "creating_account": 3,
+    #    "logging_in": 4,
+    #    "logged_in": 5,
+    #    "main_menu": 6,
+    # }
+
+
+    def HandleMessage(self, clientname, message):
+
+        cur_client = self.online_clients[clientname]
+        state = cur_client.state
+
+        if state is None:
+            self.SendMessages(cur_client.conn, """
+Welcome to the server!
+1. Login
+2. Create Account
+3. Exit
+""")
             if message == "1":
-                self.SendMessages(cur_client.conn, "Login Menu")
+                cur_client.state = STATES["login_menu"]
             elif message == "2":
-                self.SendMessages(cur_client.conn, "Create Account")
+                cur_client.state = STATES["creating_account"]
+            elif message == "3":
+                pass
+
+        elif state == STATES["login_menu"]:
+            self.SendMessages(cur_client.conn, "Enter your username: ")
+            pass
+        elif state == STATES["logging_in"]:
+            pass
+        elif state == STATES["creating_account"]:
+            pass
+        elif state == STATES["entering_username"]:
+            pass
+        elif state == STATES["entering_password"]:
+            pass
+            pass
+        elif state == STATES["logged_in"]:
+            pass
+        elif state == STATES["main_menu"]:
+            pass
+
+
+    def DoesUserExist(self, username):
+        cursor = self.cnx.cursor()
+        cursor.execute(f"SELECT * FROM users WHERE username = '{username}'")
+        if cursor.fetchone():
+            return True
+        return False
 
     def SendMessages(self, conn, message):
         message = f"{len(message):<{self.header_length}}".encode("utf-8") + message.encode("utf-8")

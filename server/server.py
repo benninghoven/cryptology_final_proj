@@ -33,6 +33,7 @@ class ActiveClient:
 
 class Server:
     def __init__(self):
+        # need to use a lock for threads on online_clients
         self.online_clients = {}
         self.header_length = int(config["top-secret"]["HeaderLength"])
         self.Start()
@@ -75,22 +76,33 @@ class Server:
         # start with handshake protocol
         # then start listening to what they say and reply based on state
         cur_client = self.online_clients[clientname]
+        self.SendMessages(cur_client.conn, """
+                          Welcome to the server!
+                          1. Login
+                          2. Create Account
+                          3. Exit
+                          """)
         while True:
             header = cur_client.conn.recv(self.header_length)
             if not len(header):
                 print(f"{clientname} disconnected")
                 del self.online_clients[clientname]
                 break
-            message = cur_client.conn.recv(int(header))
+            message = cur_client.conn.recv(int(header)).decode("utf-8")
+
             print(f"{clientname}: {message}")
 
+            if message == "1":
+                self.SendMessages(cur_client.conn, "Login Menu")
+            elif message == "2":
+                self.SendMessages(cur_client.conn, "Create Account")
+
     def SendMessages(self, conn, message):
-        # attach the header to the message
         message = f"{len(message):<{self.header_length}}".encode("utf-8") + message.encode("utf-8")
-        print(f"Sending message: {message}")
-        conn.send(message)
-
-
+        try:
+            conn.send(message)
+        except Exception as e:
+            print(f"Error sending message: {e}")
 
     def LoginMenu(self, current_connection):
         message = "You are now connected to the server."

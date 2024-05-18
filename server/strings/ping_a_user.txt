@@ -1,0 +1,5 @@
+=------------------------------------------------------------------------------=
+| ROBCO Ping-a-user                                                            |
+=------------------------------------------------------------------------------=
+> Enter "back" to return to the main menu
+> Please enter the username you wish to check online status for:

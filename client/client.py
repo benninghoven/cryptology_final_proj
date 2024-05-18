@@ -13,12 +13,14 @@ class Client:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.header_length = int(config["top-secret"]["HeaderLength"])
 
+        self.is_sensitive = False
+
         self.ConnectToServer()
 
         self.listen_thread = threading.Thread(target=self.Listen)
         self.listen_thread.start()
 
-        self.input_thread = threading.Thread(target=self.GetInput)
+        self.input_thread = threading.Thread(target=self.Input)
         self.input_thread.start()
 
     def __del__(self):
@@ -36,10 +38,20 @@ class Client:
         print("disconnecting from server...")
         self.socket.close()
 
-    def GetInput(self):
+    def Input(self):
         while True:
-            message = input()
+            if self.is_sensitive:
+                message = self.GetSensitiveInput()
+            else:
+                message = self.GetInput()
+
             self.SendMessage(message)
+
+    def GetInput(self):
+        return input()
+
+    def GetSensitiveInput(self):
+        return pwinput.pwinput()
 
     def SendMessage(self, message):
         header = f"{len(message):<{self.header_length}}"

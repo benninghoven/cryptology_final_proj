@@ -21,6 +21,7 @@ class Client:
         self.input_thread = threading.Thread(target=self.GetInput)
         self.input_thread.start()
 
+
     def __del__(self):
         print("destroying client")
         self.DisconnectFromServer()
@@ -37,20 +38,25 @@ class Client:
         self.socket.close()
 
     def GetInput(self):
+        print("getting client input")
         while True:
             message = input()
             self.SendMessage(message)
 
     def SendMessage(self, message):
         header = f"{len(message):<{self.header_length}}"
+        print(f"HEADER: {header}")
         full_message = header + message
+        print(f"FULL MESSAGE: {full_message}")
         try:
             self.socket.send(full_message.encode("utf-8"))
         except Exception as e:
-            print(f"Error, could not send message: {e}")
+            print(f"Error: {e}")
             exit()
 
     def Listen(self):
+        print("listening for messages")
+
         try:
             while True:
                 header = self.socket.recv(self.header_length).decode("utf-8")
@@ -59,10 +65,8 @@ class Client:
                     break
                 message_length = int(header)
                 message = self.socket.recv(message_length).decode("utf-8")
-                # clear screen
-                print("\033[H\033[J")
-                print(message)
+                print(f"server: {message}")
 
         except Exception as e:
-            print(f"Error, could not receive message: {e}")
+            print(e)
             exit()

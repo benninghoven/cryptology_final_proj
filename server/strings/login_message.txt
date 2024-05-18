@@ -1,0 +1,7 @@
+=------------------------------------------------------------------------------=
+| Username Creation Rules                                                      |
+| Contain no whitespace                                                        |
+| Be less than 16 characters                                                   |
+| contain only ASCII characters                                                |
+
+enter your desired username: 

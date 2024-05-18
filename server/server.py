@@ -167,9 +167,17 @@ class Server:
 
     def HandleLoginPassword(self, clientname, message):
         password = message
-        if True:
+
+        cursor = self.cnx.cursor()
+        cursor.execute(f"SELECT hashed_password FROM users WHERE username = '{self.online_clients[clientname].username}'")
+        hashed_password = cursor.fetchone()[0]
+        cursor.close()
+
+        if bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8")):
             cur_client = self.online_clients[clientname]
-            self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
+            main_menu_string = self.GetMenuString("main_menu.txt")
+            main_menu_string += f"Welcome back, {cur_client.username}!\n"
+            self.SendMessages(self.online_clients[clientname].conn, main_menu_string)
             cur_client.state = STATES["main_menu"]
         else:
             login_password = self.GetMenuString("login_password.txt")
@@ -237,6 +245,11 @@ class Server:
             self.SendMessages(self.online_clients[clientname].conn, main_menu_string)
 
     def HandleViewDirectMessages(self, clientname, message):
+        if message == "back":
+            self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
+            self.online_clients[clientname].state = STATES["main_menu"]
+            return
+
         # fetch their history messages from the database
         previous_chats = {}
         # insert dumby chat

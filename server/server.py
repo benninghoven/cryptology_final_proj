@@ -212,8 +212,9 @@ class Server:
     def HandleMainMenu(self, clientname, message):
         if message == "1":
             self.online_clients[clientname].state = STATES.VIEW_DIRECT_MESSAGES
-            # fetch their direct messages from the database
-            self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("view_direct_messages.txt"))
+            view_direct_messages_string = self.GetMenuString("view_direct_messages.txt")
+            view_direct_messages_string += self.GetDirectMessageList(self.online_clients[clientname].username)
+            self.SendMessages(self.online_clients[clientname].conn, view_direct_messages_string)
         elif message == "2":
             self.online_clients[clientname].state = STATES.STARTING_A_NEW_CHAT
             start_a_new_chat_string = self.GetMenuString("start_a_new_chat.txt")
@@ -228,18 +229,68 @@ class Server:
             main_menu_string += "Invalid input. Please try again.\n"
             self.SendMessages(self.online_clients[clientname].conn, main_menu_string)
 
+    def GetDirectMessageList(self, username):
+        query = f"""
+        SELECT user1, user2 FROM chat_histories
+        WHERE user1 = '{username}'
+        OR user2 = '{username}'
+        """
+        cursor = self.cnx.cursor()
+        cursor.execute(query)
+        chat_histories = cursor.fetchall()
+        cursor.close()
+
+        recently_chatted_with = ""
+
+        for chat in chat_histories:
+            if chat[0] == username:
+                other_user = chat[1]
+            else:
+                other_user = chat[0]
+
+            if self.PingUser(other_user):
+                recently_chatted_with += f"{other_user} *\n"
+            else:
+                recently_chatted_with += f"{other_user}\n"
+
+        return recently_chatted_with
+
     def HandleViewDirectMessages(self, clientname, message):
-        # SHOULD DISPLAY A LIST OF EVERY CHAT YOU'VE HAD
-        if message == "back":
+        cur_client = self.online_clients[clientname]
+
+        if message == "!back":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
             self.online_clients[clientname].state = STATES.MAIN_MENU
             return
 
-    def HandleOpenDirectMessage(self, clientname, message):
-        cur_client = self.online_clients[clientname]
         view_direct_messages_string = self.GetMenuString("view_direct_messages.txt")
+        view_direct_messages_string += self.GetDirectMessageList(cur_client.username)
+
+        potential_user = message
+        if self.DoesUserExist(potential_user):
+            self.online_clients[clientname].state = STATES.OPEN_DIRECT_MESSAGE
+            self.online_clients[clientname].chatting_with = potential_user
+            self.SendMessages(self.online_clients[clientname].conn,
+                              view_direct_messages_string + self.GetChatHistory(cur_client.username, potential_user)
+                              )
+        else:
+            self.SendMessages(self.online_clients[clientname].conn, view_direct_messages_string)
+
+    def HandleOpenDirectMessage(self, clientname, message):
+        if message == "!back":
+            view_direct_messages_string = self.GetMenuString("view_direct_messages.txt")
+            view_direct_messages_string += self.GetDirectMessageList(self.online_clients[clientname].username)
+            self.SendMessages(self.online_clients[clientname].conn, view_direct_messages_string)
+            self.online_clients[clientname].state = STATES.VIEW_DIRECT_MESSAGES
+            return
+
+        cur_client = self.online_clients[clientname]
 
         chat_history = self.GetChatHistory(cur_client.username, cur_client.chatting_with)
+
+        #  message crashes sql if message has a ' in it
+        if "'" in message:
+            message = message.replace("'", "")
 
         if chat_history == "Beggining of chat\n":
             print("inserting into database")
@@ -253,23 +304,33 @@ class Server:
                     )"""
         else:
             chat_history += f"{cur_client.username}: {message}\n"
-            print("updating database")
+            least = min(cur_client.username, cur_client.chatting_with)
+            greatest = max(cur_client.username, cur_client.chatting_with)
             query = f"""UPDATE chat_histories
             SET chat = '{chat_history}'
-            WHERE (user1 = '{cur_client.username}' AND user2 = '{cur_client.chatting_with}')
-            OR (user1 = '{cur_client.chatting_with}' AND user2 = '{cur_client.username}')"""
+            WHERE (user1 = '{least}' AND user2 = '{greatest}')
+            """
 
-        # write to the database
+        view_direct_messages_string = self.GetMenuString("view_direct_messages.txt")
+
+        for chat in chat_history.split("\n"):
+            view_direct_messages_string += chat + "\n"
+
         cursor = self.cnx.cursor()
         cursor.execute(query)
         self.cnx.commit()
 
-        self.SendMessages(self.online_clients[clientname].conn, view_direct_messages_string + chat_history)
+        # need to send the message to the other user if they are also in the same state chatting with the same person
+        for ipaddress, client in self.online_clients.items():
+            if client.username == cur_client.chatting_with and client.state == STATES.OPEN_DIRECT_MESSAGE:
+                self.SendMessages(client.conn, view_direct_messages_string)
+
+        self.SendMessages(self.online_clients[clientname].conn, view_direct_messages_string)
 
     def HandlePingUser(self, clientname, message):
         ping_a_user_string = self.GetMenuString("ping_a_user.txt")
 
-        if message == "back":
+        if message == "!back":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
             self.online_clients[clientname].state = STATES.MAIN_MENU
             return
@@ -287,7 +348,7 @@ class Server:
 
     def HandleStartingANewChat(self, clientname, message):
         print(f"STARTING A NEW CHAT WITH {message}")
-        if message == "back":
+        if message == "!back":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
             self.online_clients[clientname].state = STATES.MAIN_MENU
             return

@@ -2,11 +2,11 @@ import socket
 import threading
 import configparser
 import mysql.connector
+import bcrypt
 from datetime import datetime
 from states import STATES
 from activeclient import ActiveClient
 
-import bcrypt
 
 config = configparser.ConfigParser()
 config.read("../config.ini")
@@ -14,10 +14,8 @@ config.read("../config.ini")
 
 class Server:
     def __init__(self):
-        # need to use a lock for threads on online_clients
         self.online_clients = {}
         self.header_length = int(config["top-secret"]["HeaderLength"])
-
         self.socket = None
         self.admin_console_thread = None
         self.cnx = None
@@ -26,13 +24,9 @@ class Server:
 
     def Start(self):
         self.ConnectToDatabase()
-        print("server is starting")
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((config["top-secret"]["ServerIP"], int(config["top-secret"]["ServerPort"])))
         self.socket.listen(int(config["top-secret"]["MaxConnections"]))
-
-        self.admin_console_thread = threading.Thread(target=self.HandleAdminConsole)
-        self.admin_console_thread.start()
 
         self.ListenForConnections()
 
@@ -52,7 +46,6 @@ class Server:
         shell_sign = None
         with open(parent_dir + "shell_sign.txt", "r") as file:
             shell_sign = file.read()
-
         try:
             with open(parent_dir + filename, "r") as file:
                 return file.read() + shell_sign
@@ -61,25 +54,10 @@ class Server:
             print(f"File {filename} not found")
             return "No File Found" + shell_sign
 
-    def HandleAdminConsole(self):
-        while True:
-            command = input("$ ")
-            if command == "list":
-                for ipaddress, client in self.online_clients.items():
-                    print(f"  IP: {ipaddress}\tusername: {client.username}")
-            elif command == "exit":
-                print("shutting down server...")
-                self.cnx.close()
-                exit()
-            else:
-                print("invalid command")
-
     def ListenForConnections(self):
-        print("listening for connections")
         while True:
             conn, addr = self.socket.accept()
 
-            # recieved a new connection!
             current_client = ActiveClient(conn, addr)
             self.online_clients[current_client.name] = current_client
 
@@ -115,7 +93,10 @@ class Server:
         # get the state key
         state_key = list(STATES.keys())[list(STATES.values()).index(state)]
         cur_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{cur_time}] {state_key} {clientname}: {message}")
+        if cur_client.username:
+            print(f"[{cur_time}] {state_key} {cur_client.username}: {message}")
+        else:
+            print(f"[{cur_time}] {state_key} {clientname}: {message}")
 
         if state == STATES["initial_menu"]:
             self.HandleInitialMenu(clientname, message)
@@ -136,7 +117,9 @@ class Server:
         elif state == STATES["view_direct_messages"]:
             self.HandleViewDirectMessages(clientname, message)
         elif state == STATES["open_direct_message"]:
-            pass
+            self.HandleOpenDirectMessage(clientname, message)
+        elif state == STATES["starting_a_new_chat"]:
+            self.HandleStartingANewChat(clientname, message)
 
     def HandleInitialMenu(self, clientname, message):
         if message == "1":  # login
@@ -231,9 +214,12 @@ class Server:
     def HandleMainMenu(self, clientname, message):
         if message == "1":
             self.online_clients[clientname].state = STATES["view_direct_messages"]
+            # fetch their direct messages from the database
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("view_direct_messages.txt"))
         elif message == "2":
-            self.SendMessages(self.online_clients[clientname].conn, "START A NEW CHAT")
+            self.online_clients[clientname].state = STATES["starting_a_new_chat"]
+            start_a_new_chat_string = self.GetMenuString("start_a_new_chat.txt")
+            self.SendMessages(self.online_clients[clientname].conn, start_a_new_chat_string)
         elif message == "3":
             self.online_clients[clientname].state = STATES["ping_a_user"]
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("ping_a_user.txt"))
@@ -250,19 +236,23 @@ class Server:
             self.online_clients[clientname].state = STATES["main_menu"]
             return
 
+    def HandleOpenDirectMessage(self, clientname, message):
         # fetch their history messages from the database
         previous_chats = {}
         # insert dumby chat
-        previous_chats["dumby"] = ["This is a dumby chat", "This is a dumby chat", "This is a dumby chat"]
-        previous_chats["dumby2"] = ["This is a dumby chat", "This is a dumby chat", "This is a dumby chat"]
-        previous_chats["dumby3"] = ["This is a dumby chat", "This is a dumby chat", "This is a dumby chat"]
+        previous_chats["dumby_username"] = [
+                "dumby_username: yes hello",
+                "dumby_username: this is a test message",
+                "dumby_username: this is a test message",
+                ]
 
         view_direct_messages_string = self.GetMenuString("view_direct_messages.txt")
 
-        for chat in previous_chats:
-            view_direct_messages_string += f"{chat}\n"
-
-        self.SendMessages(self.online_clients[clientname].conn, view_direct_messages_string)
+        for key, value in previous_chats.items():
+            view_direct_messages_string += f"{key}\n"
+            for message in value:
+                view_direct_messages_string += f"{message}\n"
+            view_direct_messages_string += "\n"
 
     def HandlePingUser(self, clientname, message):
         ping_a_user_string = self.GetMenuString("ping_a_user.txt")
@@ -282,6 +272,33 @@ class Server:
         else:
             ping_a_user_string += "User does not exist. Please try again.\n\n"
             self.SendMessages(self.online_clients[clientname].conn, ping_a_user_string)
+
+    def HandleStartingANewChat(self, clientname, message):
+        if message == "back":
+            self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
+            self.online_clients[clientname].state = STATES["main_menu"]
+            return
+
+        cur_client = self.online_clients[clientname]
+
+        if message == cur_client.username:
+            starting_a_new_chat_string = self.GetMenuString("start_a_new_chat.txt")
+            starting_a_new_chat_string += "You cannot start a chat with yourself. Please try again.\n"
+            self.SendMessages(self.online_clients[clientname].conn, starting_a_new_chat_string)
+            return
+
+        if self.DoesUserExist(message):
+            if self.PingUser(message):
+                cur_client.state = STATES["open_direct_message"]
+                cur_client.chatting_with = message
+            else:
+                starting_a_new_chat_string = self.GetMenuString("start_a_new_chat.txt")
+                starting_a_new_chat_string += f"{message} is currently offline. Please try again.\n"
+                self.SendMessages(self.online_clients[clientname].conn, starting_a_new_chat_string)
+
+    def OpenDirectMessage(self, clientname, message):
+        cur_client = self.online_clients[clientname]
+        print(f"{cur_client.username} is chatting with {cur_client.chatting_with}")
 
     def VetPassword(self, password):
         return " " not in password and len(password) < 16

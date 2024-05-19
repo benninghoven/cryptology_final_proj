@@ -12,3 +12,4 @@ class ActiveClient:
         self.username = None
         self.password = None
         self.logged_in = False
+        self.chatting_with = None

@@ -10,4 +10,5 @@ STATES = {
         "new_message": 8,
         "view_direct_messages": 9,
         "open_direct_message": 10,
+        "starting_a_new_chat": 11,
 }

@@ -1,14 +1,14 @@
-STATES = {
-        "initial_menu": 0,
-        "login_username": 1,
-        "register_username": 2,
-        "login_password": 3,
-        "register_password": 4,
-        "main_menu": 5,
-        "reenter_password": 6,
-        "ping_a_user": 7,
-        "new_message": 8,
-        "view_direct_messages": 9,
-        "open_direct_message": 10,
-        "starting_a_new_chat": 11,
-}
+from enum import Enum, auto
+
+class STATES(Enum):
+    INITIAL_MENU = auto()
+    LOGIN_USERNAME = auto()
+    LOGIN_PASSWORD = auto()
+    REGISTER_USERNAME = auto()
+    REGISTER_PASSWORD = auto()
+    REENTER_PASSWORD = auto()
+    MAIN_MENU = auto()
+    VIEW_DIRECT_MESSAGES = auto()
+    OPEN_DIRECT_MESSAGE = auto()
+    STARTING_A_NEW_CHAT = auto()
+    PING_A_USER = auto()

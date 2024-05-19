@@ -23,6 +23,7 @@ class Server:
         self.Start()
 
     def Start(self):
+        print("Server is starting...")
         self.ConnectToDatabase()
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((config["top-secret"]["ServerIP"], int(config["top-secret"]["ServerPort"])))
@@ -43,32 +44,28 @@ class Server:
 
     def GetMenuString(self, filename):
         parent_dir = "strings/"
-        shell_sign = None
-        with open(parent_dir + "shell_sign.txt", "r") as file:
-            shell_sign = file.read()
         try:
             with open(parent_dir + filename, "r") as file:
-                return file.read() + shell_sign
+                return file.read()
 
         except FileNotFoundError:
             print(f"File {filename} not found")
-            return "No File Found" + shell_sign
+            return "No File Found"
 
     def ListenForConnections(self):
         while True:
             conn, addr = self.socket.accept()
-
             current_client = ActiveClient(conn, addr)
-            self.online_clients[current_client.name] = current_client
-
-            first_message_to_client = self.GetMenuString("initial_menu.txt")
-            self.SendMessages(current_client.conn, first_message_to_client)
-
-            current_client.thread = threading.Thread(target=self.HandleIncomingSockets, args=(current_client.name,))
+            self.online_clients[current_client.peername] = current_client
+            current_client.thread = threading.Thread(target=self.HandleIncomingSockets, args=(current_client.peername,))
             current_client.thread.start()
 
     def HandleIncomingSockets(self, clientname):
         cur_client = self.online_clients[clientname]
+
+        cur_client.state = STATES.INITIAL_MENU
+        first_message_to_client = self.GetMenuString("initial_menu.txt")
+        self.SendMessages(cur_client.conn, first_message_to_client)
 
         while True:
             header = cur_client.conn.recv(self.header_length)
@@ -83,55 +80,54 @@ class Server:
                 message = message.decode("utf-8")
             except Exception as e:
                 print(f"Error decoding message: {e}")
+                message = "Error decoding message"
 
             self.HandleMessage(clientname, message)
 
     def HandleMessage(self, clientname, message):
-
         cur_client = self.online_clients[clientname]
         state = cur_client.state
         # get the state key
-        state_key = list(STATES.keys())[list(STATES.values()).index(state)]
         cur_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if cur_client.username:
-            print(f"[{cur_time}] {state_key} {cur_client.username}: {message}")
+            print(f"[{cur_time}] {state} {cur_client.username}: {message}")
         else:
-            print(f"[{cur_time}] {state_key} {clientname}: {message}")
+            print(f"[{cur_time}] {state} {clientname}: {message}")
 
-        if state == STATES["initial_menu"]:
+        if state == STATES.INITIAL_MENU:
             self.HandleInitialMenu(clientname, message)
-        elif state == STATES["login_username"]:
+        elif state == STATES.LOGIN_USERNAME:
             self.HandleLoginUsername(clientname, message)
-        elif state == STATES["login_password"]:
+        elif state == STATES.LOGIN_PASSWORD:
             self.HandleLoginPassword(clientname, message)
-        elif state == STATES["register_username"]:
+        elif state == STATES.REGISTER_USERNAME:
             self.HandleRegisterUsername(clientname, message)
-        elif state == STATES["register_password"]:
+        elif state == STATES.REGISTER_PASSWORD:
             self.HandleRegisterPassword(clientname, message)
-        elif state == STATES["reenter_password"]:
+        elif state == STATES.REENTER_PASSWORD:
             self.HandleReenterPassword(clientname, message)
-        elif state == STATES["main_menu"]:
+        elif state == STATES.MAIN_MENU:
             self.HandleMainMenu(clientname, message)
-        elif state == STATES["ping_a_user"]:
-            self.HandlePingUser(clientname, message)
-        elif state == STATES["view_direct_messages"]:
+        elif state == STATES.VIEW_DIRECT_MESSAGES:
             self.HandleViewDirectMessages(clientname, message)
-        elif state == STATES["open_direct_message"]:
+        elif state == STATES.OPEN_DIRECT_MESSAGE:
             self.HandleOpenDirectMessage(clientname, message)
-        elif state == STATES["starting_a_new_chat"]:
+        elif state == STATES.PING_A_USER:
+            self.HandlePingUser(clientname, message)
+        elif state == STATES.STARTING_A_NEW_CHAT:
             self.HandleStartingANewChat(clientname, message)
+        else:
+            self.sendMessages(cur_client.conn, "Invalid state")
 
     def HandleInitialMenu(self, clientname, message):
-        if message == "1":  # login
+        if message == "1":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("login_username.txt"))
-            self.online_clients[clientname].state = STATES["login_username"]
-        elif message == "2":  # create account
+            self.online_clients[clientname].state = STATES.LOGIN_USERNAME
+        elif message == "2":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("register_username.txt"))
-            self.online_clients[clientname].state = STATES["register_username"]
+            self.online_clients[clientname].state = STATES.REGISTER_USERNAME
         elif message == "3":  # exit
-            # TODO: CRASHES SERVER
-            # safely remove client from online_clients
-            pass
+            self.SendMessages(self.online_clients[clientname].conn, "Goodbye!")
         else:
             initial_menu_string = self.GetMenuString("initial_menu.txt")
             initial_menu_string += "Invalid input. Please try again.\n"
@@ -141,7 +137,7 @@ class Server:
         username = message
         if self.DoesUserExist(username):
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("login_password.txt"))
-            self.online_clients[clientname].state = STATES["login_password"]
+            self.online_clients[clientname].state = STATES.LOGIN_PASSWORD
             self.online_clients[clientname].username = username
         else:
             login_username = self.GetMenuString("login_username.txt")
@@ -161,7 +157,7 @@ class Server:
             main_menu_string = self.GetMenuString("main_menu.txt")
             main_menu_string += f"Welcome back, {cur_client.username}!\n"
             self.SendMessages(self.online_clients[clientname].conn, main_menu_string)
-            cur_client.state = STATES["main_menu"]
+            cur_client.state = STATES.MAIN_MENU
         else:
             login_password = self.GetMenuString("login_password.txt")
             login_password += "Invalid password. Please try again.\n"
@@ -177,7 +173,7 @@ class Server:
             else:
                 self.online_clients[clientname].username = potential_username
                 self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("register_password.txt"))
-                self.online_clients[clientname].state = STATES["register_password"]
+                self.online_clients[clientname].state = STATES.REGISTER_PASSWORD
         else:
             register_username = self.GetMenuString("register_username.txt")
             register_username += "Invalid username. Please try again.\n"
@@ -188,7 +184,7 @@ class Server:
         if self.VetPassword(potential_password):
             self.online_clients[clientname].password = potential_password
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("reenter_password.txt"))
-            self.online_clients[clientname].state = STATES["reenter_password"]
+            self.online_clients[clientname].state = STATES.REENTER_PASSWORD
 
     def HandleReenterPassword(self, clientname, message):
         if message == self.online_clients[clientname].password:
@@ -202,26 +198,28 @@ class Server:
             cursor = self.cnx.cursor()
             cursor.execute(query)
             self.cnx.commit()
-
-            self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
-            self.online_clients[clientname].state = STATES["main_menu"]
+            main_menu_string = self.GetMenuString("main_menu.txt")
+            cur_client = self.online_clients[clientname]
+            main_menu_string += f"Welcome back, {cur_client.username}!\n"
+            self.SendMessages(self.online_clients[clientname].conn, main_menu_string)
+            self.online_clients[clientname].state = STATES.MAIN_MENU
         else:
             reenter_password_string = self.GetMenuString("reenter_password.txt")
             reenter_password_string += "Passwords do not match. Please try again.\n"
             self.SendMessages(self.online_clients[clientname].conn, reenter_password_string)
-            self.online_clients[clientname].state = STATES["reenter_password"]
+            self.online_clients[clientname].state = STATES.REENTER_PASSWORD
 
     def HandleMainMenu(self, clientname, message):
         if message == "1":
-            self.online_clients[clientname].state = STATES["view_direct_messages"]
+            self.online_clients[clientname].state = STATES.VIEW_DIRECT_MESSAGES
             # fetch their direct messages from the database
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("view_direct_messages.txt"))
         elif message == "2":
-            self.online_clients[clientname].state = STATES["starting_a_new_chat"]
+            self.online_clients[clientname].state = STATES.STARTING_A_NEW_CHAT
             start_a_new_chat_string = self.GetMenuString("start_a_new_chat.txt")
             self.SendMessages(self.online_clients[clientname].conn, start_a_new_chat_string)
         elif message == "3":
-            self.online_clients[clientname].state = STATES["ping_a_user"]
+            self.online_clients[clientname].state = STATES.PING_A_USER
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("ping_a_user.txt"))
         elif message == "4":
             self.SendMessages(self.online_clients[clientname].conn, "LOGOUT")
@@ -231,35 +229,49 @@ class Server:
             self.SendMessages(self.online_clients[clientname].conn, main_menu_string)
 
     def HandleViewDirectMessages(self, clientname, message):
+        # SHOULD DISPLAY A LIST OF EVERY CHAT YOU'VE HAD
         if message == "back":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
-            self.online_clients[clientname].state = STATES["main_menu"]
+            self.online_clients[clientname].state = STATES.MAIN_MENU
             return
 
     def HandleOpenDirectMessage(self, clientname, message):
-        # fetch their history messages from the database
-        previous_chats = {}
-        # insert dumby chat
-        previous_chats["dumby_username"] = [
-                "dumby_username: yes hello",
-                "dumby_username: this is a test message",
-                "dumby_username: this is a test message",
-                ]
-
+        cur_client = self.online_clients[clientname]
         view_direct_messages_string = self.GetMenuString("view_direct_messages.txt")
 
-        for key, value in previous_chats.items():
-            view_direct_messages_string += f"{key}\n"
-            for message in value:
-                view_direct_messages_string += f"{message}\n"
-            view_direct_messages_string += "\n"
+        chat_history = self.GetChatHistory(cur_client.username, cur_client.chatting_with)
+
+        if chat_history == "Beggining of chat\n":
+            print("inserting into database")
+
+            chat_history += f"{cur_client.username}: {message}\n"
+            query = f"""INSERT INTO chat_histories (user1, user2, chat)
+            VALUES (
+                    LEAST('{cur_client.username}', '{cur_client.chatting_with}'),
+                    GREATEST('{cur_client.username}', '{cur_client.chatting_with}'),
+                    '{chat_history}'
+                    )"""
+        else:
+            chat_history += f"{cur_client.username}: {message}\n"
+            print("updating database")
+            query = f"""UPDATE chat_histories
+            SET chat = '{chat_history}'
+            WHERE (user1 = '{cur_client.username}' AND user2 = '{cur_client.chatting_with}')
+            OR (user1 = '{cur_client.chatting_with}' AND user2 = '{cur_client.username}')"""
+
+        # write to the database
+        cursor = self.cnx.cursor()
+        cursor.execute(query)
+        self.cnx.commit()
+
+        self.SendMessages(self.online_clients[clientname].conn, view_direct_messages_string + chat_history)
 
     def HandlePingUser(self, clientname, message):
         ping_a_user_string = self.GetMenuString("ping_a_user.txt")
 
         if message == "back":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
-            self.online_clients[clientname].state = STATES["main_menu"]
+            self.online_clients[clientname].state = STATES.MAIN_MENU
             return
 
         if self.DoesUserExist(message):
@@ -274,9 +286,10 @@ class Server:
             self.SendMessages(self.online_clients[clientname].conn, ping_a_user_string)
 
     def HandleStartingANewChat(self, clientname, message):
+        print(f"STARTING A NEW CHAT WITH {message}")
         if message == "back":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
-            self.online_clients[clientname].state = STATES["main_menu"]
+            self.online_clients[clientname].state = STATES.MAIN_MENU
             return
 
         cur_client = self.online_clients[clientname]
@@ -288,17 +301,51 @@ class Server:
             return
 
         if self.DoesUserExist(message):
-            if self.PingUser(message):
-                cur_client.state = STATES["open_direct_message"]
-                cur_client.chatting_with = message
-            else:
-                starting_a_new_chat_string = self.GetMenuString("start_a_new_chat.txt")
-                starting_a_new_chat_string += f"{message} is currently offline. Please try again.\n"
-                self.SendMessages(self.online_clients[clientname].conn, starting_a_new_chat_string)
+            open_direct_message_string = self.GetMenuString("open_direct_message.txt")
+
+            cur_client.state = STATES.OPEN_DIRECT_MESSAGE
+            cur_client.chatting_with = message
+
+            print(f"{cur_client.username} is now chatting with {cur_client.chatting_with}")
+
+            self.SendMessages(
+                    self.online_clients[clientname].conn,
+                    open_direct_message_string + self.GetChatHistory(cur_client.username, cur_client.chatting_with)
+                    )
+
+        else:
+            starting_a_new_chat_string = self.GetMenuString("start_a_new_chat.txt")
+            starting_a_new_chat_string += "User does not exist. Please try again.\n"
+            self.SendMessages(self.online_clients[clientname].conn, starting_a_new_chat_string)
+
+    def GetChatHistory(self, username, chatting_with):
+        query = f"""
+        SELECT chat FROM chat_histories
+        WHERE (user1 = LEAST('{username}', '{chatting_with}')
+        AND user2 = GREATEST('{username}', '{chatting_with}')
+               )"""
+        cursor = self.cnx.cursor()
+        cursor.execute(query)
+
+        chat_history = cursor.fetchall()
+        if chat_history:
+            print(f"CHAT HISTORY FROM DATABASE: {chat_history}")
+            chat_history = chat_history[0][0]
+        else:
+            chat_history = "Beggining of chat\n"
+
+        return chat_history
 
     def OpenDirectMessage(self, clientname, message):
+        print(f"OPENING DIRECT MESSAGE WITH {message}")
         cur_client = self.online_clients[clientname]
-        print(f"{cur_client.username} is chatting with {cur_client.chatting_with}")
+        # generate a fake list of contacts
+        recently_chatted_with = ["user1", "user2", "user3"]
+        open_direct_message_string = self.GetMenuString("open_direct_message.txt")
+        for user in recently_chatted_with:
+            # if the user is online, append an asterisk
+            open_direct_message_string += f"{user}\n"
+        self.SendMessages(cur_client.conn, open_direct_message_string)
 
     def VetPassword(self, password):
         return " " not in password and len(password) < 16

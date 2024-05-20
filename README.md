@@ -1,49 +1,48 @@
-# Secure Chat
+# Contributors
+Devin Benninghoven - Server side, backend dockerization, and documentation
+Shadi Hirbawi - Documentation, client side, helped setup state machine
 
-This project implements a system enabling a group of users to chat securely. Users are registered with the chat server. When initiating a chat, the user connects to the server, enters their username and password, and if verified, their status is changed to "online". The user can then select other registered users to chat with. They can also check who else is online and invite them to join the conversation.
+## To set up the project, follow these steps:
 
-## Key Features
+1. **Clone the repository:**
 
-- **User Authentication**: Users log in with a username and password.
-- **Online Status**: Users are marked as "online" when logged in and "offline" when disconnected.
-- **Secure Key Distribution**: The server generates a symmetric key for each chat session, encrypts it using the public keys of the participating users, and distributes it securely.
-- **Encryption**: All messages exchanged during the chat are encrypted using the symmetric key provided by the server.
-- **Digital Signature**: Users have the option to choose between RSA or Digital Signature Algorithm for digital signature.
-- **User Interaction**: Users can initiate chats, invite others, and leave conversations.
+    ```bash
+    git clone https://github.com/benninghoven/cryptology_final_proj
+    cd cryptology_final_proj
+    ```
 
-## How it Works
+2. **Set up a virtual environment for client:**
 
-1. User logs in to the chat server.
-2. User selects other users to chat with.
-3. Server generates a symmetric key for the chat session.
-4. Server encrypts the symmetric key using the public keys of the participating users and distributes it securely.
-5. Users decrypt the symmetric key using their private keys.
-6. Chat session begins with encrypted messages exchanged using the symmetric key.
-7. Users can leave the conversation or disconnect from the server, changing their status to "offline".
+    On macOS and Linux:
+    
+    ```bash
+    cd client
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
 
-## Requirements
+3. **Set up a virtual environment for server:**
 
-- Programming Language: [Specify here]
-- Libraries/Frameworks: [Specify here]
-- Public/Private Key Pairs for Users
-- Encryption Algorithm (e.g., RSA, Digital Signature Algorithm)
+    On macOS and Linux:
+    
+    ```bash
+    cd server
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
 
 ## Usage
 
-[Provide instructions on how to set up and run the application.]
+To run the application, execute the following command:
 
-## Note
+```bash
+cd client
+python main.py
+```
 
-This implementation supports single chat sessions and ensures confidentiality and digital signature for secure communication.
-
-## Contributors
-
-[List of contributors or acknowledgements]
-
-## License
-
-[Specify the license]
-
-## Feedback and Contributions
-
-[Provide information on how users can give feedback or contribute to the project.]
+```bash
+cd server
+python main.py
+```

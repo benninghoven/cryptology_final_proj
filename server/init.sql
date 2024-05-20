@@ -1,7 +1,11 @@
+-- also need to store a 1024 bit public key for each user
+
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(255) NOT NULL,
-    hashed_password VARCHAR(255) NOT NULL
+    hashed_password VARCHAR(255) NOT NULL,
+    public_key VARCHAR(1024) NOT NULL,
+    private_key VARCHAR(1024) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS chat_histories (

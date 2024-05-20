@@ -5,9 +5,7 @@ import Crypto.Signature.pkcs1_15
 
 # Generate 1024-bit RSA key pair (private + public key)
 keyPair = RSA.generate(bits=1024)
-
 server_public_key = keyPair.publickey().export_key()
-
 server_private_key = keyPair.export_key()
 
 print(f"Public key: {server_public_key.decode('utf-8')}")

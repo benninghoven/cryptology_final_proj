@@ -7,6 +7,9 @@ from datetime import datetime
 from states import STATES
 from activeclient import ActiveClient
 
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+import base64
 
 config = configparser.ConfigParser()
 config.read("../config.ini")
@@ -20,10 +23,29 @@ class Server:
         self.admin_console_thread = None
         self.cnx = None
 
+        self.public_key = None
+        self.private_key = None
+
         self.Start()
 
     def Start(self):
         print("Server is starting...")
+
+        try:
+            with open("private_key.pem", "r") as file:
+                self.private_key = file.read()
+            with open("public_key.pem", "r") as file:
+                self.public_key = file.read()
+        except FileNotFoundError:
+            print("generating new keys")
+            keyPair = RSA.generate(bits=1024)
+            self.public_key = keyPair.publickey().export_key().decode("utf-8")
+            self.private_key = keyPair.export_key().decode("utf-8")
+            with open("private_key.pem", "w") as file:
+                file.write(self.private_key)
+            with open("public_key.pem", "w") as file:
+                file.write(self.public_key)
+
         self.ConnectToDatabase()
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((config["top-secret"]["ServerIP"], int(config["top-secret"]["ServerPort"])))
@@ -154,6 +176,14 @@ class Server:
 
         if bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8")):
             cur_client = self.online_clients[clientname]
+            # get the public key from the database
+            query = f"SELECT public_key FROM users WHERE username = '{cur_client.username}'"
+            cursor = self.cnx.cursor()
+            cursor.execute(query)
+            public_key = cursor.fetchone()[0]
+
+            cur_client.public_key = public_key
+
             main_menu_string = self.GetMenuString("main_menu.txt")
             main_menu_string += f"Welcome back, {cur_client.username}!\n"
             self.SendMessages(self.online_clients[clientname].conn, main_menu_string)
@@ -188,19 +218,30 @@ class Server:
 
     def HandleReenterPassword(self, clientname, message):
         if message == self.online_clients[clientname].password:
-            username = self.online_clients[clientname].username
+            # DIRECT TO MAIN MENU
+            cur_client = self.online_clients[clientname]
+
+            username = cur_client.username
             hashed_password = bcrypt.hashpw(self.online_clients[clientname].password.encode("utf-8"), bcrypt.gensalt())
-            query = f"""INSERT INTO users (username, hashed_password)
-            VALUES (
-                    '{username}',
-                    '{hashed_password.decode("utf-8")}'
-                    )"""
+
+            keyPair = RSA.generate(bits=1024)
+            # generete keys
+            public_key = keyPair.publickey().export_key()
+            private_key = keyPair.export_key()
+
+            cur_client.public_key = public_key
+
+            query = f"""INSERT INTO users (username, hashed_password, public_key, private_key)
+            VALUES ('{username}', '{hashed_password.decode("utf-8")}', '{public_key.decode("utf-8")}', '{private_key.decode("utf-8")}')
+            """
+
             cursor = self.cnx.cursor()
             cursor.execute(query)
             self.cnx.commit()
+
             main_menu_string = self.GetMenuString("main_menu.txt")
-            cur_client = self.online_clients[clientname]
             main_menu_string += f"Welcome back, {cur_client.username}!\n"
+
             self.SendMessages(self.online_clients[clientname].conn, main_menu_string)
             self.online_clients[clientname].state = STATES.MAIN_MENU
         else:
@@ -256,6 +297,8 @@ class Server:
         return recently_chatted_with
 
     def HandleViewDirectMessages(self, clientname, message):
+        # All messages exchanged during the chat must be encrypted using the symmetric key provided by the server and must be delivered to all users participating in the chat. 
+
         cur_client = self.online_clients[clientname]
 
         if message == "!back":
@@ -313,8 +356,9 @@ class Server:
 
         view_direct_messages_string = self.GetMenuString("view_direct_messages.txt")
 
+        chat_history_string = ""
         for chat in chat_history.split("\n"):
-            view_direct_messages_string += chat + "\n"
+            chat_history_string += chat + "\n"
 
         cursor = self.cnx.cursor()
         cursor.execute(query)
@@ -323,9 +367,17 @@ class Server:
         # need to send the message to the other user if they are also in the same state chatting with the same person
         for ipaddress, client in self.online_clients.items():
             if client.username == cur_client.chatting_with and client.state == STATES.OPEN_DIRECT_MESSAGE:
-                self.SendMessages(client.conn, view_direct_messages_string)
+                self.SendMessages(
+                        client.conn,
+                        view_direct_messages_string + chat_history_string
+                        )
 
-        self.SendMessages(self.online_clients[clientname].conn, view_direct_messages_string)
+        encrypted_message = self.EncryptMessage(message, clientname)
+
+        self.SendMessages(
+                self.online_clients[clientname].conn,
+                view_direct_messages_string + chat_history_string,
+                )
 
     def HandlePingUser(self, clientname, message):
         ping_a_user_string = self.GetMenuString("ping_a_user.txt")
@@ -390,7 +442,6 @@ class Server:
 
         chat_history = cursor.fetchall()
         if chat_history:
-            print(f"CHAT HISTORY FROM DATABASE: {chat_history}")
             chat_history = chat_history[0][0]
         else:
             chat_history = "Beggining of chat\n"
@@ -400,12 +451,7 @@ class Server:
     def OpenDirectMessage(self, clientname, message):
         print(f"OPENING DIRECT MESSAGE WITH {message}")
         cur_client = self.online_clients[clientname]
-        # generate a fake list of contacts
-        recently_chatted_with = ["user1", "user2", "user3"]
         open_direct_message_string = self.GetMenuString("open_direct_message.txt")
-        for user in recently_chatted_with:
-            # if the user is online, append an asterisk
-            open_direct_message_string += f"{user}\n"
         self.SendMessages(cur_client.conn, open_direct_message_string)
 
     def VetPassword(self, password):
@@ -428,8 +474,24 @@ class Server:
         return False
 
     def SendMessages(self, conn, message):
-        message = f"{len(message):<{self.header_length}}".encode("utf-8") + message.encode("utf-8")
+        header = f"{len(message):<{self.header_length}}".encode("utf-8")
+
         try:
-            conn.send(message)
+            conn.send(header + message.encode("utf-8"))
         except Exception as e:
             print(f"Error sending message: {e}")
+
+    def EncryptMessage(self, message, clientname):
+        print(f"Plaintext message: {message}")
+
+        cur_client = self.online_clients[clientname]
+        client_public_key = RSA.import_key(cur_client.public_key)
+
+        cipher = PKCS1_OAEP.new(client_public_key)
+        encrypted_message = cipher.encrypt(message.encode("utf-8"))
+
+        # Encode the encrypted message in base64 for safe transmission/storage
+        encrypted_message_base64 = base64.b64encode(encrypted_message).decode("utf-8")
+        print(f"Encrypted message (base64): {encrypted_message_base64}")
+
+        return encrypted_message_base64

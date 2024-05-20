@@ -18,3 +18,5 @@ class ActiveClient:
 
         self.current_state = None
         self.next_state = None
+
+        self.public_key = None

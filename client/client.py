@@ -3,7 +3,6 @@ import configparser
 import threading
 import pwinput
 
-
 config = configparser.ConfigParser()
 config.read("../config.ini")
 
@@ -22,6 +21,15 @@ class Client:
 
         self.input_thread = threading.Thread(target=self.Input)
         self.input_thread.start()
+
+        self.server_public_key = None
+        try:
+            with open("server_public_key.pem", "rb") as file:
+                self.server_public_key = file.read()
+                print("server public key loaded")
+        except FileNotFoundError:
+            print("Error, server public key not found")
+            exit()
 
     def __del__(self):
         print("destroying client")
@@ -66,12 +74,15 @@ class Client:
         try:
             while True:
                 header = self.socket.recv(self.header_length).decode("utf-8")
+
                 if not header:
                     print("server disconnected")
                     break
+
                 message_length = int(header)
                 message = self.socket.recv(message_length).decode("utf-8")
-                # clear screen
+                # decode message with your private key
+
                 print("\033[H\033[J")
                 print(message)
 

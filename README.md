@@ -1,5 +1,7 @@
 # Contributors
+
 Devin Benninghoven - Server side, backend dockerization, and documentation
+
 Shadi Hirbawi - Documentation, client side, helped setup state machine
 
 ## To set up the project, follow these steps:

@@ -1,5 +1,3 @@
--- also need to store a 1024 bit public key for each user
-
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(255) NOT NULL,
@@ -12,6 +10,7 @@ CREATE TABLE IF NOT EXISTS chat_histories (
     id SERIAL PRIMARY KEY,
     user1 VARCHAR(255) NOT NULL,
     user2 VARCHAR(255) NOT NULL,
+    sym_key VARCHAR(1024) NOT NULL,
     chat TEXT NOT NULL,
     CHECK (user1 < user2),  -- Ensures user1 is always lexicographically smaller than user2
     UNIQUE (user1, user2),  -- Ensures unique pairs of users

@@ -3,6 +3,10 @@ from Crypto.Hash import SHA256
 import Crypto.Signature.pkcs1_15
 
 
+# Now generate using DSA
+
+
+
 # Generate 1024-bit RSA key pair (private + public key)
 keyPair = RSA.generate(bits=1024)
 server_public_key = keyPair.publickey().export_key()

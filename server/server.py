@@ -11,6 +11,8 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 import base64
 
+from GenerateSymmetricKey import GenerateSymmetricKey
+
 config = configparser.ConfigParser()
 config.read("../config.ini")
 
@@ -328,7 +330,6 @@ class Server:
             return
 
         cur_client = self.online_clients[clientname]
-
         chat_history = self.GetChatHistory(cur_client.username, cur_client.chatting_with)
 
         #  message crashes sql if message has a ' in it
@@ -339,13 +340,25 @@ class Server:
             print("inserting into database")
 
             chat_history += f"{cur_client.username}: {message}\n"
-            query = f"""INSERT INTO chat_histories (user1, user2, chat)
+            sym_key = GenerateSymmetricKey()
+            query = f"""INSERT INTO chat_histories (user1, user2, sym_key, chat)
             VALUES (
                     LEAST('{cur_client.username}', '{cur_client.chatting_with}'),
                     GREATEST('{cur_client.username}', '{cur_client.chatting_with}'),
+                    '{sym_key}',
                     '{chat_history}'
                     )"""
         else:
+            get_sym_key_query = f"""
+            SELECT sym_key FROM chat_histories
+            WHERE (user1 = LEAST('{cur_client.username}', '{cur_client.chatting_with}')
+            AND user2 = GREATEST('{cur_client.username}', '{cur_client.chatting_with}')
+            )
+            """
+            cursor = self.cnx.cursor()
+            cursor.execute(get_sym_key_query)
+            sym_key = cursor.fetchone()[0]
+
             chat_history += f"{cur_client.username}: {message}\n"
             least = min(cur_client.username, cur_client.chatting_with)
             greatest = max(cur_client.username, cur_client.chatting_with)
@@ -363,6 +376,13 @@ class Server:
         cursor = self.cnx.cursor()
         cursor.execute(query)
         self.cnx.commit()
+
+        print(f"SYMMETRIC KEY: {sym_key}")
+
+        self.SendMessages(
+                self.online_clients[clientname].conn,
+                "sym_key" + sym_key
+                )
 
         # need to send the message to the other user if they are also in the same state chatting with the same person
         for ipaddress, client in self.online_clients.items():
@@ -399,7 +419,7 @@ class Server:
             self.SendMessages(self.online_clients[clientname].conn, ping_a_user_string)
 
     def HandleStartingANewChat(self, clientname, message):
-        print(f"STARTING A NEW CHAT WITH {message}")
+
         if message == "!back":
             self.SendMessages(self.online_clients[clientname].conn, self.GetMenuString("main_menu.txt"))
             self.online_clients[clientname].state = STATES.MAIN_MENU
@@ -419,7 +439,7 @@ class Server:
             cur_client.state = STATES.OPEN_DIRECT_MESSAGE
             cur_client.chatting_with = message
 
-            print(f"{cur_client.username} is now chatting with {cur_client.chatting_with}")
+            print(f"{cur_client.username} is chatting with {cur_client.chatting_with} FOR THE FIRST TIME")
 
             self.SendMessages(
                     self.online_clients[clientname].conn,
@@ -447,12 +467,6 @@ class Server:
             chat_history = "Beggining of chat\n"
 
         return chat_history
-
-    def OpenDirectMessage(self, clientname, message):
-        print(f"OPENING DIRECT MESSAGE WITH {message}")
-        cur_client = self.online_clients[clientname]
-        open_direct_message_string = self.GetMenuString("open_direct_message.txt")
-        self.SendMessages(cur_client.conn, open_direct_message_string)
 
     def VetPassword(self, password):
         return " " not in password and len(password) < 16

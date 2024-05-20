@@ -22,6 +22,8 @@ class Client:
         self.input_thread = threading.Thread(target=self.Input)
         self.input_thread.start()
 
+        self.chats = {}
+
         self.server_public_key = None
         try:
             with open("server_public_key.pem", "rb") as file:
@@ -81,7 +83,9 @@ class Client:
 
                 message_length = int(header)
                 message = self.socket.recv(message_length).decode("utf-8")
-                # decode message with your private key
+                # check if message is a symmetric key
+                if message.startswith("sym_key"):
+                    print(f"received symmetric key: {message}")
 
                 print("\033[H\033[J")
                 print(message)
